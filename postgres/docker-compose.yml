@@ -12,7 +12,7 @@ services:
       - warehouse_data:/var/lib/postgresql/data
     networks:
       - default
-      - warehouse_net
+      - sahmk-network
 
     restart: unless-stopped
 

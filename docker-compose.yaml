@@ -337,5 +337,6 @@ volumes:
   postgres-db-volume:
 
 networks:
-  warehouse_net:
+  default:
+    name: sahmk-network
     external: true
