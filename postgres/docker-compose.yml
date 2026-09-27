@@ -10,6 +10,8 @@ services:
       - "5433:5432"
     volumes:
       - warehouse_data:/var/lib/postgresql/data
+      - ./ddl:/docker-entrypoint-initdb.d:ro
+      
     restart: unless-stopped
 
 volumes:
