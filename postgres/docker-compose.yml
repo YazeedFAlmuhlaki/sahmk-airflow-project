@@ -1,0 +1,27 @@
+services:
+  warehouse:
+    image: postgres:16
+    container_name: sahmk_warehouse
+    environment:
+      POSTGRES_DB: warehouse
+      POSTGRES_USER: yazeed
+      POSTGRES_PASSWORD: ${WAREHOUSE_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+    networks:
+      - default
+      - warehouse_net
+
+    restart: unless-stopped
+
+
+volumes:
+  warehouse_data:
+
+networks:
+  warehouse_net:
+    external: true
+
+
