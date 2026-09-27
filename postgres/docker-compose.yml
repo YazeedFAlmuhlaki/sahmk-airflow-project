@@ -10,20 +10,12 @@ services:
       - "5433:5432"
     volumes:
       - warehouse_data:/var/lib/postgresql/data
-    networks:
-      - default
-      - sahmk-network
-
     restart: unless-stopped
-
 
 volumes:
   warehouse_data:
-
 
 networks:
   default:
     name: sahmk-network
     external: true
-
-
