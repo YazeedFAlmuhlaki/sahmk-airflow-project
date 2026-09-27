@@ -22,7 +22,7 @@ One row per Tadawul security. Columns cover the trading symbol, Arabic and Engli
 
 ### `dim_date`
 
-A static calendar from 2020 through 2030 with ISO calendar attributes and a trading-day flag. Fridays and Saturdays are marked as weekend days.
+A static calendar from 2020 through 2030. Each row holds an integer `date_key` in `YYYYMMDD` form, the calendar date, ISO day of week, month, year, and weekend and trading-day flags. Fridays and Saturdays are marked as weekend, non-trading days.
 
 ### `fact_daily_prices`
 
@@ -43,8 +43,8 @@ Defined in `dags/dim_company_load.py`. Runs weekly with catchup disabled.
 
 Defined in `dags/fact_daily_prices_load.py`. Runs daily with catchup disabled.
 
-1. `extract_company_symbols` reads the symbol list from `dim_company`.
-2. `extract_daily_market_data` requests the current quote for each symbol, authenticating with an `X-API-Key` header from the `sahmk_api` Connection, and shapes each quote into a row with `date_key`, `symbol`, OHLC prices, and volume.
+1. `extract_company_symbols` reads up to 50 symbols from `dim_company`.
+2. `extract_daily_market_data` requests the current quote for each symbol, authenticating with an `X-API-Key` header from the `sahmk_api` Connection, and shapes each quote into a row with `date_key`, `symbol`, OHLC prices, and volume. `date_key` is the run date, and symbols whose request does not return HTTP 200 are skipped.
 3. `load_market_data` upserts the rows into `fact_daily_prices` on `(date_key, symbol)`, including volume.
 
 API keys and database credentials are kept out of the code. They live in Airflow Connections and local `.env` files.
@@ -92,6 +92,8 @@ docker compose up -d
 cd ..
 ```
 
+On first start, PostgreSQL runs the scripts in `postgres/ddl/` in order. They create the three tables and populate `dim_date`. These scripts run only when the data volume is empty.
+
 The warehouse is reachable at `localhost:5433` from the host and at `warehouse:5432` from containers on `sahmk-network`.
 
 ### 4. Start Airflow
@@ -111,7 +113,7 @@ Under **Admin > Connections**, create:
 
 | Field | Value |
 | --- | --- |
-| Host | Sahmk API base URL |
+| Host | Sahmk API base URL, without the `/api/v1` path |
 | Password | Your Sahmk API key |
 
 **`postgres_warehouse`** (Postgres)
@@ -139,15 +141,18 @@ docker compose exec airflow-scheduler airflow dags trigger fact_daily_prices_dag
 
 ```text
 .
-├── config/                        # Airflow configuration
+├── config/
+│   └── airflow.cfg                # Airflow configuration
 ├── dags/
 │   ├── dim_company_load.py        # Company dimension DAG
 │   └── fact_daily_prices_load.py  # Daily prices DAG
-├── plugins/                       # Custom Airflow plugins
-├── logs/                          # Airflow runtime logs
 ├── docker-compose.yaml            # Airflow, Redis, Airflow metadata DB
 └── postgres/
-    └── docker-compose.yml         # PostgreSQL warehouse
+    ├── docker-compose.yml         # PostgreSQL warehouse
+    └── ddl/
+        ├── 01_dim_company.sql
+        ├── 02_dim_date.sql        # Also populates the 2020 to 2030 calendar
+        └── 03_fact_daily_prices.sql
 ```
 
 ## Stopping
