@@ -52,15 +52,28 @@ The table uses a composite primary key on `(date_key, symbol)`. Foreign keys lin
 
 ## ETL Pipeline
 
-The ETL workflows use Python-based Airflow DAGs and the TaskFlow API.
+The ETL workflows use Python-based Airflow DAGs and the TaskFlow API. Company metadata is synchronized weekly, while daily market quotes are extracted on a daily schedule.
 
-1. An extraction task reads the Sahmk API connection from Airflow.
-2. The API key is sent through request headers and the response is parsed as JSON.
-3. Pagination is handled with the API's `limit` and `offset` parameters until all records are retrieved.
-4. Loading tasks use `PostgresHook` to execute SQL against the warehouse.
-5. `INSERT ... ON CONFLICT DO UPDATE` statements provide idempotent upserts for safe scheduled reruns.
+### Company Dimension Load
 
-The company dimension workflow is defined in `dags/dim_company_load.py` with the DAG ID `dim_company_dag`.
+`dags/dim_company_load.py` defines `dim_company_dag`, which runs weekly with catchup disabled.
+
+1. `extract_companies` reads the Sahmk API connection from Airflow.
+2. The API key is sent through request headers and paginated JSON responses are parsed.
+3. `load_companies` writes company records to PostgreSQL through `PostgresHook`.
+4. `INSERT ... ON CONFLICT (symbol) DO UPDATE` provides idempotent updates.
+
+### Daily Market Price Load
+
+`dags/fact_daily_prices_load.py` defines `fact_daily_prices_dag`, which runs daily with catchup disabled.
+
+1. `extract_company_symbols` reads company symbols from `dim_company` through `PostgresHook`.
+2. `extract_daily_market_data` requests the current quote for each symbol from the Sahmk API.
+3. API authentication uses the `sahmk_api` Airflow Connection and an `X-API-Key` request header.
+4. Each quote is normalized into a daily price record containing `date_key`, `symbol`, OHLC prices, and volume.
+5. `load_market_data` upserts the records into `fact_daily_prices` using `(date_key, symbol)` as the conflict key.
+
+The upsert updates existing company-date records and includes volume updates, preserving company-date uniqueness and referential integrity through the fact table's composite and foreign keys.
 
 API keys, database credentials, and other secrets are not embedded in Python code. They are managed through Airflow Connections and environment files excluded from source control.
 
@@ -159,14 +172,15 @@ For connections made from Airflow containers, use the warehouse service hostname
 Airflow creates DAGs paused by default in this configuration. In the web interface:
 
 1. Open the **DAGs** page.
-2. Find `dim_company_dag`.
-3. Enable the DAG with the toggle.
+2. Find `dim_company_dag` or `fact_daily_prices_dag`.
+3. Enable the selected DAG with the toggle.
 4. Select the trigger action to start a manual run.
 
-The same DAG can be triggered from the Airflow CLI inside the running Airflow container:
+The DAGs can also be triggered from the Airflow CLI inside the running Airflow container:
 
 ```bash
 docker compose exec airflow-scheduler airflow dags trigger dim_company_dag
+docker compose exec airflow-scheduler airflow dags trigger fact_daily_prices_dag
 ```
 
 Monitor task logs and run status from the Airflow web interface.
@@ -177,7 +191,8 @@ Monitor task logs and run status from the Airflow web interface.
 .
 ├── config/                    # Airflow configuration
 ├── dags/                      # Airflow DAG definitions
-│   └── dim_company_load.py    # Company dimension extraction and loading DAG
+│   ├── dim_company_load.py    # Company dimension extraction and loading DAG
+│   └── fact_daily_prices_load.py # Daily market quote extraction DAG
 ├── docker-compose.yaml        # Airflow, Redis, and Airflow metadata database
 ├── plugins/                   # Custom Airflow plugins
 ├── postgres/
