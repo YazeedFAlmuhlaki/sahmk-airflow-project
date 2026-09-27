@@ -1,2 +1,7 @@
 /.env
 /postgres/.env
+
+# Airflow runtime files
+/logs/
+/dags/__pycache__/
+*.py[cod]
