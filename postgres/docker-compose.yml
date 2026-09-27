@@ -20,8 +20,10 @@ services:
 volumes:
   warehouse_data:
 
+
 networks:
-  warehouse_net:
+  default:
+    name: sahmk-network
     external: true
 
 
